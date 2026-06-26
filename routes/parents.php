@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admission\AdmissionController;
 use App\Http\Controllers\Admission\AdmissionDocumentController;
+use App\Http\Controllers\Calendar\CalendarController;
 use App\Http\Controllers\Parent\Student\StudentController;
 use Illuminate\Support\Facades\Route;
 
