@@ -59,8 +59,17 @@ done
 
 ---
 
-## Phase 1 — Stabilize on Laravel 12 (in progress)
-- [ ] Remove runtime `Schema::create()` from controllers/services → rely on migrations
-- [ ] Register the scheduler + move notification sending to queued jobs
-- [ ] Fix Critical/High security: IDOR `company_id` scoping, replace hardcoded-key encryption, fail-closed reCAPTCHA, path-traversal guard, mandatory `CompanyScope`
-- [ ] Move `env()` calls out of runtime code → `config()`; verify `config:cache`
+## Phase 1 — Stabilize on Laravel 12 (done, except deferred crypto)
+- [x] Remove runtime `Schema::create()` from controllers/services → rely on migrations
+- [x] Register the scheduler (`notifications:process-scheduled`, `leads:cleanup`) + move notification sending to a queued `SendNotificationLog` job
+- [x] Fail-closed reCAPTCHA + path-traversal guard on `/private-storage`
+- [x] Close cross-tenant IDOR on admission approve/reject/comment (scope via `whereHas('student')`)
+- [x] Move `env()` out of runtime code → `config('app.encryption_master_key')`; `config:cache` verified
+
+### Deferred security sub-project (do AFTER the L13 bump, on a staging copy of prod data)
+Decision 2026-06-27: defer because these require re-encrypting/altering existing production data.
+- Replace `BaseHelper::customCrypt()` hardcoded key + fixed IV (used for `users.email`) with authenticated encryption + a keyed **blind index** column for login lookups; re-encrypt existing rows.
+- Remove `encrypt()`'s `ctype_xdigit` passthrough and `decrypt()`'s fail-open (returns plaintext/ciphertext on failure) — needs data validation first.
+- `CompanyScope` is **fail-open** when the session has no `company_id` ([Scopes/CompanyScope.php:17](app/Models/Scopes/CompanyScope.php#L17)); make it deny-by-default for tenant models and audit every model that should carry it.
+- `.env.example`: ship `APP_DEBUG=false`, set `SESSION_SECURE_COOKIE=true`; disable `PDO::ATTR_PERSISTENT` on tenant/mysql connections.
+- Add a multi-tenant **isolation test** asserting cross-company access is denied (the suite has none).
