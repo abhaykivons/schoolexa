@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Log;
 class RecaptchaService
 {
     protected ?string $secretKey;
+
     protected float $minScore;
 
     public function __construct()
@@ -22,12 +23,13 @@ class RecaptchaService
     public function verify(?string $token): bool
     {
         // If reCAPTCHA is not configured, skip verification
-        if (!$this->secretKey || empty($this->secretKey)) {
+        if (! $this->secretKey || empty($this->secretKey)) {
             return true;
         }
 
         if (empty($token)) {
             Log::warning('reCAPTCHA token missing');
+
             return false;
         }
 
@@ -39,22 +41,26 @@ class RecaptchaService
 
             $result = $response->json();
 
-            if (!$result['success']) {
+            if (! data_get($result, 'success')) {
                 Log::warning('reCAPTCHA verification failed', ['errors' => $result['error-codes'] ?? []]);
+
                 return false;
             }
 
             // For reCAPTCHA v3, check the score
             if (isset($result['score']) && $result['score'] < $this->minScore) {
                 Log::warning('reCAPTCHA score too low', ['score' => $result['score']]);
+
                 return false;
             }
 
             return true;
         } catch (\Exception $e) {
             Log::error('reCAPTCHA verification error', ['error' => $e->getMessage()]);
-            // In case of error, allow submission but log it
-            return true;
+
+            // Fail closed: a configured reCAPTCHA that cannot be verified must not
+            // be treated as a pass. Honeypot/timing checks are the second layer.
+            return false;
         }
     }
 }

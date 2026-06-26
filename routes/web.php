@@ -236,10 +236,13 @@ Route::middleware(['auth', 'verified', 'checkUser:school'])->group(function () {
         Artisan::call('storage:link');
     });
 
-    Route::get('/private-storage/{path}', function ($path) {
-        $fullPath = storage_path('app/private/' . $path);
-        
-        if (!file_exists($fullPath)) {
+    Route::get('/private-storage/{path}', function (string $path) {
+        $base = storage_path('app/private');
+        $fullPath = realpath($base.'/'.$path);
+
+        // Reject path traversal: the resolved path must exist and stay within the
+        // private storage directory. realpath() collapses any "../" segments.
+        if ($fullPath === false || ! str_starts_with($fullPath, $base.DIRECTORY_SEPARATOR)) {
             abort(404);
         }
 

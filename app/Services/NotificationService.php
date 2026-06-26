@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Jobs\SendNotificationLog;
 use App\Models\AdmissionDocument;
 use App\Models\AdmissionForm;
 use App\Models\EmailTemplate;
@@ -14,15 +15,14 @@ use App\Models\StudentEnrollment;
 use App\Models\User;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Facades\Schema;
 
 class NotificationService
 {
     /**
      * Trigger notifications for an event
      *
-     * @param string $event The trigger event name
-     * @param array $context Context data including the entity and variables
+     * @param  string  $event  The trigger event name
+     * @param  array  $context  Context data including the entity and variables
      * @return int Number of notifications queued/sent
      */
     public function trigger(string $event, array $context = []): int
@@ -32,7 +32,7 @@ class NotificationService
 
         foreach ($flows as $flow) {
             // Check conditions if any
-            if (!$this->checkConditions($flow, $context)) {
+            if (! $this->checkConditions($flow, $context)) {
                 continue;
             }
 
@@ -59,7 +59,7 @@ class NotificationService
 
         foreach ($flow->conditions as $field => $expectedValue) {
             $actualValue = data_get($context, $field) ?? data_get($context['entity'] ?? [], $field);
-            
+
             if ($actualValue != $expectedValue) {
                 return false;
             }
@@ -154,7 +154,7 @@ class NotificationService
 
                 case 'custom':
                     // Add custom emails
-                    if (!empty($flow->custom_emails)) {
+                    if (! empty($flow->custom_emails)) {
                         foreach ($flow->custom_emails as $email) {
                             $recipients[] = [
                                 'type' => 'custom',
@@ -228,6 +228,7 @@ class NotificationService
                     'user_id' => $student->user_id,
                 ];
             }
+
             return $student;
         }
 
@@ -235,6 +236,7 @@ class NotificationService
             $enrollment = $context['enrollment'];
             if ($enrollment instanceof StudentEnrollment) {
                 $student = $enrollment->student;
+
                 return [
                     'email' => $student->user?->email,
                     'name' => $student->full_name,
@@ -271,8 +273,8 @@ class NotificationService
 
         // Get template - first try flow's assigned template, then fallback to find by event type
         $template = $flow->emailTemplate;
-        
-        if (!$template) {
+
+        if (! $template) {
             // Try to find a template that matches the trigger event
             $templateEventType = $this->mapTriggerEventToTemplate($flow->trigger_event);
             $template = EmailTemplate::where('event_type', $templateEventType)
@@ -306,9 +308,11 @@ class NotificationService
             'scheduled_at' => $this->calculateScheduledTime($flow),
         ]);
 
-        // Process based on timing
+        // Process based on timing. Immediate notifications are queued so the
+        // request is not blocked on SMTP; delayed/scheduled logs stay 'pending'
+        // and are picked up by notifications:process-scheduled.
         if ($flow->send_timing === 'immediate') {
-            $this->processLog($log);
+            SendNotificationLog::dispatch($log);
         }
 
         return $log;
@@ -327,7 +331,7 @@ class NotificationService
         // Add common variables
         $variables['school_name'] = $variables['school_name'] ?? config('app.name');
         $variables['support_email'] = $variables['support_email'] ?? config('mail.from.address');
-        $variables['login_url'] = $variables['login_url'] ?? config('app.url') . '/login';
+        $variables['login_url'] = $variables['login_url'] ?? config('app.url').'/login';
         $variables['date'] = $variables['date'] ?? now()->format('F j, Y');
 
         // Add recipient-specific variables
@@ -367,6 +371,7 @@ class NotificationService
             if ($time->isPast()) {
                 $time->addDay();
             }
+
             return $time;
         }
 
@@ -383,7 +388,7 @@ class NotificationService
 
             // Send email
             if ($flow && $flow->send_email && $log->body) {
-                Mail::html($log->body, function ($message) use ($log, $flow) {
+                Mail::html($log->body, function ($message) use ($log) {
                     $message->to($log->recipient_email, $log->recipient_name)
                         ->subject($log->subject);
 
@@ -437,11 +442,6 @@ class NotificationService
      */
     protected function createInAppNotification(NotificationLog $log): void
     {
-        // Ensure table exists
-        if (!Schema::hasTable('in_app_notifications')) {
-            return;
-        }
-
         // Get event info for better display
         $triggerEvents = NotificationFlow::getTriggerEvents();
         $eventInfo = $triggerEvents[$log->trigger_event] ?? null;
@@ -479,7 +479,7 @@ class NotificationService
             ->get();
 
         foreach ($logs as $log) {
-            $this->processLog($log);
+            SendNotificationLog::dispatch($log);
         }
 
         return $logs->count();
@@ -625,7 +625,7 @@ class NotificationService
         // Always send an in-app notification for parent registration
         $service->sendInAppNotification(
             $parent->id,
-            'Welcome to ' . config('app.name', 'School'),
+            'Welcome to '.config('app.name', 'School'),
             'Your account has been successfully created. You can now access all features.',
             'success',
             ['trigger_event' => 'parent_registered']
@@ -656,13 +656,8 @@ class NotificationService
         string $type = 'info',
         array $options = []
     ): ?InAppNotification {
-        // Ensure table exists
-        if (!Schema::hasTable('in_app_notifications')) {
-            return null;
-        }
-
         $user = User::find($userId);
-        if (!$user) {
+        if (! $user) {
             return null;
         }
 
@@ -692,6 +687,7 @@ class NotificationService
         array $options = []
     ): ?InAppNotification {
         $service = app(self::class);
+
         return $service->sendInAppNotification($userId, $title, $message, $type, $options);
     }
 
@@ -770,7 +766,7 @@ class NotificationService
             'variables' => [
                 'student_name' => $student?->full_name ?? 'Student',
                 'parent_name' => $parent?->name ?? 'Parent',
-                'application_id' => 'APP-' . date('Y') . '-' . str_pad($form->id, 4, '0', STR_PAD_LEFT),
+                'application_id' => 'APP-'.date('Y').'-'.str_pad($form->id, 4, '0', STR_PAD_LEFT),
                 'grade_applied' => $student?->grade?->name ?? 'N/A',
                 'submission_date' => $form->created_at?->format('F j, Y'),
             ],
@@ -848,7 +844,7 @@ class NotificationService
                 'parent_name' => $parent?->name ?? 'Parent',
                 'document_name' => $document->document_type ?? 'Document',
                 'reason' => $reason,
-                'resubmit_link' => config('app.url') . '/parent/admission',
+                'resubmit_link' => config('app.url').'/parent/admission',
             ],
         ]);
     }
@@ -869,12 +865,12 @@ class NotificationService
         // Send in-app notification to staff
         $service->sendInAppNotification(
             $staffUser->id,
-            'Welcome to ' . config('app.name', 'School') . '!',
+            'Welcome to '.config('app.name', 'School').'!',
             'Your staff account has been successfully created. You can now log in and access all features.',
             'success',
             [
                 'trigger_event' => 'staff_account_created',
-                'action_url' => config('app.url') . '/login',
+                'action_url' => config('app.url').'/login',
                 'action_text' => 'Login Now',
             ]
         );
@@ -891,7 +887,7 @@ class NotificationService
                 'staff_name' => $staffUser->name,
                 'email' => $staffUser->email,
                 'password' => $password ?? '********',
-                'login_url' => config('app.url') . '/login',
+                'login_url' => config('app.url').'/login',
                 'department' => $department,
                 'designation' => $designation,
             ],
@@ -907,7 +903,7 @@ class NotificationService
 
         // Get staff info from enrollment
         $staffEmail = $enrollment->email_address ?? $enrollment->personal_email;
-        $staffName = $enrollment->full_legal_name ?? ($enrollment->first_name . ' ' . $enrollment->last_name);
+        $staffName = $enrollment->full_legal_name ?? ($enrollment->first_name.' '.$enrollment->last_name);
 
         // Check if there's already a Staff record with a User (account created)
         $staff = \App\Models\Staff::where('enrollment_id', $enrollment->id)->first();
@@ -955,7 +951,7 @@ class NotificationService
 
         // Get staff info from enrollment
         $staffEmail = $enrollment->email_address ?? $enrollment->personal_email;
-        $staffName = $enrollment->full_legal_name ?? ($enrollment->first_name . ' ' . $enrollment->last_name);
+        $staffName = $enrollment->full_legal_name ?? ($enrollment->first_name.' '.$enrollment->last_name);
 
         // Check if there's already a Staff record with a User
         $staff = \App\Models\Staff::where('enrollment_id', $enrollment->id)->first();
@@ -966,7 +962,7 @@ class NotificationService
             $service->sendInAppNotification(
                 $userId,
                 'Enrollment Status Update',
-                'Your staff enrollment application was not approved. ' . ($reason ?? 'Please contact administration for details.'),
+                'Your staff enrollment application was not approved. '.($reason ?? 'Please contact administration for details.'),
                 'error',
                 [
                     'trigger_event' => 'staff_enrollment_rejected',
@@ -1027,7 +1023,7 @@ class NotificationService
                 'approver_name' => $approver->name,
                 'request_type' => $requestType,
                 'details' => $details,
-                'approval_link' => $approvalLink ?? config('app.url') . '/dashboard',
+                'approval_link' => $approvalLink ?? config('app.url').'/dashboard',
             ],
         ]);
     }
@@ -1116,8 +1112,8 @@ class NotificationService
         $service = app(self::class);
 
         $staffEmail = $enrollment->email_address ?? $enrollment->personal_email;
-        $staffName = $enrollment->full_legal_name ?? ($enrollment->first_name . ' ' . $enrollment->last_name);
-        $applicationId = 'STAFF-' . date('Y') . '-' . str_pad($enrollment->id, 4, '0', STR_PAD_LEFT);
+        $staffName = $enrollment->full_legal_name ?? ($enrollment->first_name.' '.$enrollment->last_name);
+        $applicationId = 'STAFF-'.date('Y').'-'.str_pad($enrollment->id, 4, '0', STR_PAD_LEFT);
 
         return $service->trigger('staff_enrollment_submitted', [
             'staff' => [
@@ -1155,7 +1151,7 @@ class NotificationService
         $joiningDate = $enrollment?->enrollment_date ?? date('F j, Y');
         $reportingTo = $onboardingDetails['reporting_to'] ?? 'HR Department';
         $orientationDate = $onboardingDetails['orientation_date'] ?? 'TBD';
-        
+
         $checklistItems = $onboardingDetails['checklist_items'] ?? '<ul>
 <li>Complete HR documentation</li>
 <li>Set up your workstation</li>
@@ -1172,7 +1168,7 @@ class NotificationService
             'info',
             [
                 'trigger_event' => 'staff_onboarding',
-                'action_url' => config('app.url') . '/dashboard',
+                'action_url' => config('app.url').'/dashboard',
                 'action_text' => 'View Checklist',
             ]
         );
@@ -1284,7 +1280,7 @@ class NotificationService
                 'fee_type' => $feeType,
                 'amount' => $amount,
                 'due_date' => $dueDate,
-                'payment_link' => $paymentLink ?? config('app.url') . '/parent/fees',
+                'payment_link' => $paymentLink ?? config('app.url').'/parent/fees',
             ],
         ]);
     }
@@ -1377,7 +1373,7 @@ class NotificationService
                 'amount' => $amount,
                 'days_overdue' => $daysOverdue,
                 'late_fee' => $lateFee,
-                'payment_link' => $paymentLink ?? config('app.url') . '/parent/fees',
+                'payment_link' => $paymentLink ?? config('app.url').'/parent/fees',
             ],
         ]);
     }
@@ -1423,7 +1419,7 @@ class NotificationService
                     'event_time' => $eventTime,
                     'event_location' => $eventLocation,
                     'event_description' => $eventDescription,
-                    'rsvp_link' => $rsvpLink ?? config('app.url') . '/events',
+                    'rsvp_link' => $rsvpLink ?? config('app.url').'/events',
                 ],
             ]);
         }
@@ -1552,9 +1548,8 @@ class NotificationService
                 'parent_name' => $parentUser?->name ?? 'Parent',
                 'documents_needed' => $documentsNeeded,
                 'deadline' => $deadline,
-                'upload_link' => $uploadLink ?? config('app.url') . '/parent/admission',
+                'upload_link' => $uploadLink ?? config('app.url').'/parent/admission',
             ],
         ]);
     }
 }
-

@@ -107,6 +107,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Custom Field-Encryption Master Key
+    |--------------------------------------------------------------------------
+    |
+    | Base64-encoded storage path to the file holding the master key used by
+    | App\Helpers\BaseHelper for custom field encryption. Read via config so it
+    | survives config:cache — env() returns null once the config is cached.
+    |
+    */
+
+    'encryption_master_key' => env('ENCRYPTION_MASTER_KEY'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Maintenance Mode Driver
     |--------------------------------------------------------------------------
     |

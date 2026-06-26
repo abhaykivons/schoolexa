@@ -476,7 +476,9 @@ class SchoolAdmissionController extends Controller
             'field_name' => 'nullable|string|max:255',
         ]);
 
-        $admissionForm = AdmissionForm::findOrFail($admissionFormId);
+        // Scope through the student (CompanyScope) so comments cannot be added to
+        // another company's admission form.
+        $admissionForm = AdmissionForm::whereHas('student')->findOrFail($admissionFormId);
 
         AdmissionFormComment::create([
             'admission_form_id' => $admissionForm->id,
@@ -510,7 +512,10 @@ class SchoolAdmissionController extends Controller
      */
     public function approve(Request $request, string $id)
     {
-        $admissionForm = AdmissionForm::with('student')->findOrFail($id);
+        // Scope through the student so an AdmissionForm (which has no company_id of
+        // its own) cannot be approved/rejected across companies: whereHas applies the
+        // Student CompanyScope, yielding a 404 for another company's form.
+        $admissionForm = AdmissionForm::with('student')->whereHas('student')->findOrFail($id);
 
         DB::beginTransaction();
         try {
@@ -548,7 +553,10 @@ class SchoolAdmissionController extends Controller
      */
     public function reject(Request $request, string $id)
     {
-        $admissionForm = AdmissionForm::with('student')->findOrFail($id);
+        // Scope through the student so an AdmissionForm (which has no company_id of
+        // its own) cannot be approved/rejected across companies: whereHas applies the
+        // Student CompanyScope, yielding a 404 for another company's form.
+        $admissionForm = AdmissionForm::with('student')->whereHas('student')->findOrFail($id);
 
         DB::beginTransaction();
         try {

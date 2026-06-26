@@ -5,49 +5,18 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\InAppNotification;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Schema;
 
 class NotificationController extends Controller
 {
-    /**
-     * Ensure the notifications table exists
-     */
-    private function ensureTableExists(): void
-    {
-        if (!Schema::hasTable('in_app_notifications')) {
-            Schema::create('in_app_notifications', function ($table) {
-                $table->id();
-                $table->foreignId('company_id')->constrained()->onDelete('cascade');
-                $table->foreignId('user_id')->constrained()->onDelete('cascade');
-                $table->string('title');
-                $table->text('message');
-                $table->string('type')->default('info');
-                $table->string('icon')->nullable();
-                $table->string('action_url')->nullable();
-                $table->string('action_text')->nullable();
-                $table->string('notifiable_type')->nullable();
-                $table->unsignedBigInteger('notifiable_id')->nullable();
-                $table->foreignId('notification_log_id')->nullable();
-                $table->string('trigger_event')->nullable();
-                $table->boolean('is_read')->default(false);
-                $table->timestamp('read_at')->nullable();
-                $table->timestamps();
-                $table->index(['user_id', 'is_read']);
-                $table->index(['company_id', 'user_id']);
-            });
-        }
-    }
-
     /**
      * Get user's notifications
      */
     public function index(Request $request)
     {
-        $this->ensureTableExists();
-        
+
         $user = auth()->user();
-        
-        if (!$user) {
+
+        if (! $user) {
             return response()->json([
                 'notifications' => [],
                 'unread_count' => 0,
@@ -89,11 +58,10 @@ class NotificationController extends Controller
      */
     public function markAsRead(Request $request, $id)
     {
-        $this->ensureTableExists();
-        
+
         $user = auth()->user();
-        
-        if (!$user) {
+
+        if (! $user) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
@@ -101,7 +69,7 @@ class NotificationController extends Controller
             ->where('id', $id)
             ->first();
 
-        if (!$notification) {
+        if (! $notification) {
             return response()->json(['error' => 'Notification not found'], 404);
         }
 
@@ -118,11 +86,10 @@ class NotificationController extends Controller
      */
     public function markAllAsRead(Request $request)
     {
-        $this->ensureTableExists();
-        
+
         $user = auth()->user();
-        
-        if (!$user) {
+
+        if (! $user) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
@@ -144,11 +111,10 @@ class NotificationController extends Controller
      */
     public function destroy(Request $request, $id)
     {
-        $this->ensureTableExists();
-        
+
         $user = auth()->user();
-        
-        if (!$user) {
+
+        if (! $user) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
@@ -156,7 +122,7 @@ class NotificationController extends Controller
             ->where('id', $id)
             ->first();
 
-        if (!$notification) {
+        if (! $notification) {
             return response()->json(['error' => 'Notification not found'], 404);
         }
 
@@ -173,11 +139,10 @@ class NotificationController extends Controller
      */
     public function clearAll(Request $request)
     {
-        $this->ensureTableExists();
-        
+
         $user = auth()->user();
-        
-        if (!$user) {
+
+        if (! $user) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
@@ -194,11 +159,10 @@ class NotificationController extends Controller
      */
     public function unreadCount(Request $request)
     {
-        $this->ensureTableExists();
-        
+
         $user = auth()->user();
-        
-        if (!$user) {
+
+        if (! $user) {
             return response()->json(['unread_count' => 0]);
         }
 
@@ -209,4 +173,3 @@ class NotificationController extends Controller
         return response()->json(['unread_count' => $count]);
     }
 }
-
