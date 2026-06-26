@@ -142,6 +142,9 @@ Route::middleware(['auth', 'verified', 'checkUser:school'])->group(function () {
     Route::resource('staff-enrollment', EnrollmentController::class);
     Route::post('/staff-enrollment/{id}/approve', [EnrollmentController::class, 'approve']);
     Route::post('/staff-enrollment/{id}/reject', [EnrollmentController::class, 'reject']);
+    Route::get('/staff-enrollment/{id}/file/{type}', [EnrollmentController::class, 'downloadFile'])
+        ->whereIn('type', ['resume', 'portfolio'])
+        ->name('staff-enrollment.file');
     Route::resource('staff-enrollment-settings', EnrollmentSettingController::class);
 
     // Student Onboarding
@@ -236,18 +239,11 @@ Route::middleware(['auth', 'verified', 'checkUser:school'])->group(function () {
         Artisan::call('storage:link');
     });
 
-    Route::get('/private-storage/{path}', function (string $path) {
-        $base = storage_path('app/private');
-        $fullPath = realpath($base.'/'.$path);
-
-        // Reject path traversal: the resolved path must exist and stay within the
-        // private storage directory. realpath() collapses any "../" segments.
-        if ($fullPath === false || ! str_starts_with($fullPath, $base.DIRECTORY_SEPARATOR)) {
-            abort(404);
-        }
-
-        return response()->file($fullPath);
-    })->where('path', '.*')->name('private.storage');
+    // The generic /private-storage/{path} route was removed: it served any file
+    // under storage/app/private to any authenticated school user with no per-file
+    // ownership check (cross-tenant file disclosure). Files are now served through
+    // ownership-checked controllers — e.g. staff-enrollment.file (resumes/portfolios)
+    // and admission.document.view/download (admission documents).
 
 });
 

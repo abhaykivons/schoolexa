@@ -16,11 +16,13 @@
     
     $getValue = function($key) use ($formData, $safe) {
         $val = $safe($formData[$key] ?? '');
-        return $val ?: '<span class="text-muted" style="font-style:italic;">—</span>';
+        // Escape parent-supplied data so it can't inject HTML/CSS into the PDF.
+        return $val !== '' ? e($val) : '<span class="text-muted" style="font-style:italic;">—</span>';
     };
-    
+
     $getGradeName = function($gradeId) use ($grades) {
-        return $grades->firstWhere('id', $gradeId)?->name ?? '<span class="text-muted" style="font-style:italic;">—</span>';
+        $name = $grades->firstWhere('id', $gradeId)?->name;
+        return $name ? e($name) : '<span class="text-muted" style="font-style:italic;">—</span>';
     };
 @endphp
 
