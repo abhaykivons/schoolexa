@@ -4,11 +4,11 @@ Living document tracking the phased upgrade. Work happens on branch `upgrade/lar
 
 | Phase | Goal | Status |
 |---|---|---|
-| 0 | Pre-flight: safety net, CI, backups, staging | 🔶 in progress |
-| 1 | Stabilize on Laravel 12 (de-risk before the bump) | ⬜ pending |
-| 2 | The Laravel 13 dependency bump | ⬜ pending |
-| 3 | Verify on staging | ⬜ pending |
-| 4 | Atomic production deploy + rollback | ⬜ pending |
+| 0 | Pre-flight: safety net, CI, backups, staging | ✅ done (backups/staging are operational) |
+| 1 | Stabilize on Laravel 12 (de-risk before the bump) | ✅ done (crypto rewrite deferred) |
+| 2 | The Laravel 13 dependency bump | ✅ done — running **Laravel 13.17.0**, suite green |
+| 3 | Verify on staging | 📋 checklist ready — run on your staging box |
+| 4 | Atomic production deploy + rollback | 📦 scripts ready — `deploy/atomic-deploy.sh` + `rollback.sh` |
 
 Target: Laravel **13.0** (released 2026-03-17), **PHP 8.3+** (prod runs 8.4), PHPUnit 12 / Pest 4.
 
@@ -86,3 +86,31 @@ Resolved to **Laravel 13.17.0** on PHP 8.4. Constraint changes: `php ^8.3`, `lar
 ### ⚠️ Deploy-time items (handle in Phase 4)
 - **Session cookie / cache prefix names changed** (`_` → `-` defaults in L13). `SESSION_COOKIE` and `CACHE_PREFIX` were unset → would log out all users and miss cache on deploy. Pinned to pre-upgrade values in `.env.example` (`schoolexa_session`, `schoolexa_cache_`); **production `.env` must set the same** (plus `REDIS_PREFIX=schoolexa_database_` if on Redis).
 - New `symfony/polyfill-php85` defines `array_first/array_last` on PHP < 8.5 — prefer `Arr::first/Arr::last` going forward (none in use today).
+
+---
+
+## Phase 3 — Staging verification (run on your staging box, seeded from a prod restore)
+Do NOT validate only against the in-memory SQLite test DB — the enum/encryption/raw-SQL paths differ on MySQL.
+- [ ] `composer install` (no `--no-dev`), `php artisan migrate --force`, `npm ci && npm run build`
+- [ ] `php artisan optimize` then smoke every portal: **admin, developer, IT-admin, staff, student, parent** (login + dashboard + one write each)
+- [ ] Admission flow: create → comment → approve/reject → enroll; confirm the IDOR fix (another company's form id returns 404)
+- [ ] PDF generation (dompdf + fpdi watermark) renders
+- [ ] Queue worker running (`php artisan queue:work`); trigger a notification and confirm the `SendNotificationLog` job delivers (not synchronous)
+- [ ] Scheduler: `php artisan schedule:run` once; confirm `notifications:process-scheduled` drains due `notification_logs`
+- [ ] `composer audit` clean; check `storage/logs` for deprecation warnings under load
+
+## Phase 4 — Production deploy (atomic, with rollback)
+Scripts: [`deploy/atomic-deploy.sh`](deploy/atomic-deploy.sh) (release-dir + symlink swap) and [`deploy/rollback.sh`](deploy/rollback.sh). Review the CONFIG block (paths, `PHP_FPM_SERVICE`, repo) before first use; point nginx/php-fpm at `$DEPLOY_ROOT/current/public`.
+
+**Pre-deploy (one-time for the L13 cutover):**
+1. Take the Phase-0 DB + `storage` backup; confirm a restore drill passed.
+2. In production `shared/.env`: set `SESSION_COOKIE=schoolexa_session` and `CACHE_PREFIX=schoolexa_cache_` (and `REDIS_PREFIX=schoolexa_database_` if on Redis) **before** deploying, so the L13 default change doesn't log users out / blow the cache.
+3. Confirm prod PHP is **≥ 8.3**.
+4. Ensure the scheduler cron exists: `* * * * * php $DEPLOY_ROOT/current/artisan schedule:run >> /dev/null 2>&1`
+5. Ensure a Supervisor-managed `queue:work` is running (notifications now depend on it).
+
+**Deploy:** `./deploy/atomic-deploy.sh origin/main` — builds a fresh release, runs `migrate --force --isolated`, warms caches, atomically swaps `current`, reloads php-fpm, `queue:restart`, prunes old releases.
+
+**Rollback:** `./deploy/rollback.sh` repoints `current` to the previous release instantly. Because migrations are kept backward-compatible (additive/nullable), the previous code runs against the new schema without a DB restore in the common case; restore the snapshot only if a destructive migration ran.
+
+**Zero-downtime rule:** never combine a column rename/drop with code that needs the new shape in one deploy. Expand → deploy → backfill → contract across two deploys.
