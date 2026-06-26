@@ -6,54 +6,16 @@ use App\Http\Controllers\Controller;
 use App\Models\EmailSettings;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
 use Inertia\Inertia;
 
 class EmailSettingsController extends Controller
 {
     /**
-     * Ensure email_settings table exists
-     */
-    private function ensureTableExists(): void
-    {
-        if (!Schema::hasTable('email_settings')) {
-            Schema::create('email_settings', function ($table) {
-                $table->id();
-                $table->foreignId('company_id')->constrained()->onDelete('cascade');
-                $table->enum('mail_driver', ['smtp', 'sendmail', 'mailgun', 'ses', 'postmark'])->default('smtp');
-                $table->string('smtp_host')->nullable();
-                $table->integer('smtp_port')->nullable();
-                $table->string('smtp_username')->nullable();
-                $table->text('smtp_password')->nullable();
-                $table->enum('smtp_encryption', ['tls', 'ssl', 'none'])->default('tls');
-                $table->string('mailgun_domain')->nullable();
-                $table->text('mailgun_secret')->nullable();
-                $table->string('mailgun_endpoint')->nullable();
-                $table->string('ses_key')->nullable();
-                $table->text('ses_secret')->nullable();
-                $table->string('ses_region')->nullable();
-                $table->text('postmark_token')->nullable();
-                $table->string('from_name')->nullable();
-                $table->string('from_email')->nullable();
-                $table->string('reply_to_email')->nullable();
-                $table->boolean('is_active')->default(false);
-                $table->boolean('is_verified')->default(false);
-                $table->timestamp('verified_at')->nullable();
-                $table->timestamp('last_test_at')->nullable();
-                $table->text('last_test_result')->nullable();
-                $table->timestamps();
-                $table->unique('company_id');
-            });
-        }
-    }
-
-    /**
      * Display email settings
      */
     public function index()
     {
-        $this->ensureTableExists();
 
         $settings = EmailSettings::first();
 
@@ -78,10 +40,10 @@ class EmailSettingsController extends Controller
                 'last_test_at' => $settings->last_test_at?->toISOString(),
                 'last_test_result' => $settings->last_test_result,
                 // Don't send passwords to frontend
-                'has_smtp_password' => !empty($settings->getRawOriginal('smtp_password')),
-                'has_mailgun_secret' => !empty($settings->getRawOriginal('mailgun_secret')),
-                'has_ses_secret' => !empty($settings->getRawOriginal('ses_secret')),
-                'has_postmark_token' => !empty($settings->getRawOriginal('postmark_token')),
+                'has_smtp_password' => ! empty($settings->getRawOriginal('smtp_password')),
+                'has_mailgun_secret' => ! empty($settings->getRawOriginal('mailgun_secret')),
+                'has_ses_secret' => ! empty($settings->getRawOriginal('ses_secret')),
+                'has_postmark_token' => ! empty($settings->getRawOriginal('postmark_token')),
             ] : null,
             'mailDrivers' => EmailSettings::getMailDrivers(),
             'encryptionTypes' => EmailSettings::getEncryptionTypes(),
@@ -93,7 +55,6 @@ class EmailSettingsController extends Controller
      */
     public function store(Request $request)
     {
-        $this->ensureTableExists();
 
         $validated = Validator::make($request->all(), [
             'mail_driver' => ['required', 'in:smtp,sendmail,mailgun,ses,postmark'],
@@ -120,19 +81,19 @@ class EmailSettingsController extends Controller
         if ($settings) {
             // Only update password fields if provided
             $updateData = collect($validated)->except([
-                'smtp_password', 'mailgun_secret', 'ses_secret', 'postmark_token'
+                'smtp_password', 'mailgun_secret', 'ses_secret', 'postmark_token',
             ])->toArray();
 
-            if (!empty($validated['smtp_password'])) {
+            if (! empty($validated['smtp_password'])) {
                 $updateData['smtp_password'] = $validated['smtp_password'];
             }
-            if (!empty($validated['mailgun_secret'])) {
+            if (! empty($validated['mailgun_secret'])) {
                 $updateData['mailgun_secret'] = $validated['mailgun_secret'];
             }
-            if (!empty($validated['ses_secret'])) {
+            if (! empty($validated['ses_secret'])) {
                 $updateData['ses_secret'] = $validated['ses_secret'];
             }
-            if (!empty($validated['postmark_token'])) {
+            if (! empty($validated['postmark_token'])) {
                 $updateData['postmark_token'] = $validated['postmark_token'];
             }
 
@@ -155,7 +116,6 @@ class EmailSettingsController extends Controller
      */
     public function test(Request $request)
     {
-        $this->ensureTableExists();
 
         $request->validate([
             'test_email' => ['required', 'email'],
@@ -163,14 +123,14 @@ class EmailSettingsController extends Controller
 
         $settings = EmailSettings::first();
 
-        if (!$settings) {
+        if (! $settings) {
             return response()->json([
                 'success' => false,
                 'message' => 'Please save your email settings first.',
             ], 400);
         }
 
-        if (!$settings->isConfigured()) {
+        if (! $settings->isConfigured()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Email settings are incomplete. Please check your configuration.',
@@ -184,8 +144,8 @@ class EmailSettingsController extends Controller
             // Send test email
             Mail::raw('This is a test email from your Notification Studio. If you received this, your email settings are working correctly!', function ($message) use ($request, $settings) {
                 $message->to($request->test_email)
-                    ->subject('Test Email from ' . ($settings->from_name ?? config('app.name')));
-                
+                    ->subject('Test Email from '.($settings->from_name ?? config('app.name')));
+
                 if ($settings->from_email) {
                     $message->from($settings->from_email, $settings->from_name);
                 }
@@ -196,7 +156,7 @@ class EmailSettingsController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Test email sent successfully to ' . $request->test_email,
+                'message' => 'Test email sent successfully to '.$request->test_email,
             ]);
 
         } catch (\Exception $e) {
@@ -205,7 +165,7 @@ class EmailSettingsController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to send test email: ' . $e->getMessage(),
+                'message' => 'Failed to send test email: '.$e->getMessage(),
             ], 500);
         }
     }
@@ -272,24 +232,23 @@ class EmailSettingsController extends Controller
      */
     public function toggleStatus()
     {
-        $this->ensureTableExists();
 
         $settings = EmailSettings::first();
 
-        if (!$settings) {
+        if (! $settings) {
             return redirect()
                 ->back()
                 ->with('error', 'Please configure your email settings first.');
         }
 
-        if (!$settings->is_active && !$settings->isConfigured()) {
+        if (! $settings->is_active && ! $settings->isConfigured()) {
             return redirect()
                 ->back()
                 ->with('error', 'Cannot enable incomplete email settings. Please fill in all required fields.');
         }
 
         $settings->update([
-            'is_active' => !$settings->is_active,
+            'is_active' => ! $settings->is_active,
         ]);
 
         $status = $settings->is_active ? 'enabled' : 'disabled';
@@ -299,4 +258,3 @@ class EmailSettingsController extends Controller
             ->with('success', "Email settings {$status} successfully.");
     }
 }
-

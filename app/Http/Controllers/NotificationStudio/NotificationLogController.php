@@ -6,54 +6,15 @@ use App\Http\Controllers\Controller;
 use App\Models\NotificationFlow;
 use App\Models\NotificationLog;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
 
 class NotificationLogController extends Controller
 {
     /**
-     * Ensure notification_logs table exists
-     */
-    private function ensureTablesExist(): void
-    {
-        if (!Schema::hasTable('notification_logs')) {
-            Schema::create('notification_logs', function ($table) {
-                $table->id();
-                $table->foreignId('company_id')->constrained()->onDelete('cascade');
-                $table->foreignId('notification_flow_id')->nullable();
-                $table->foreignId('email_template_id')->nullable();
-                $table->string('trigger_event');
-                $table->string('trigger_entity_type')->nullable();
-                $table->unsignedBigInteger('trigger_entity_id')->nullable();
-                $table->string('recipient_type');
-                $table->string('recipient_email');
-                $table->string('recipient_name')->nullable();
-                $table->unsignedBigInteger('recipient_user_id')->nullable();
-                $table->boolean('email_sent')->default(false);
-                $table->boolean('in_app_sent')->default(false);
-                $table->boolean('sms_sent')->default(false);
-                $table->string('subject')->nullable();
-                $table->longText('body')->nullable();
-                $table->enum('status', ['pending', 'sent', 'failed', 'queued'])->default('pending');
-                $table->text('error_message')->nullable();
-                $table->timestamp('scheduled_at')->nullable();
-                $table->timestamp('sent_at')->nullable();
-                $table->json('variables')->nullable();
-                $table->timestamps();
-                $table->index(['company_id', 'status']);
-                $table->index(['company_id', 'trigger_event']);
-                $table->index(['company_id', 'created_at']);
-                $table->index(['recipient_email']);
-            });
-        }
-    }
-
-    /**
      * Display a listing of notification logs
      */
     public function index(Request $request)
     {
-        $this->ensureTablesExist();
         $query = NotificationLog::with(['notificationFlow', 'emailTemplate']);
 
         // Filter by status
@@ -137,7 +98,7 @@ class NotificationLogController extends Controller
 
             return redirect()->back()->with('success', 'Notification retry initiated.');
         } catch (\Exception $e) {
-            return redirect()->back()->with('error', 'Retry failed: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Retry failed: '.$e->getMessage());
         }
     }
 
@@ -179,8 +140,8 @@ class NotificationLogController extends Controller
 
         $logs = $query->latest()->get();
 
-        $filename = 'notification_logs_' . date('Y-m-d_His') . '.csv';
-        
+        $filename = 'notification_logs_'.date('Y-m-d_His').'.csv';
+
         $headers = [
             'Content-Type' => 'text/csv',
             'Content-Disposition' => "attachment; filename=\"{$filename}\"",
@@ -188,7 +149,7 @@ class NotificationLogController extends Controller
 
         $callback = function () use ($logs) {
             $file = fopen('php://output', 'w');
-            
+
             // Header row
             fputcsv($file, [
                 'ID',
@@ -222,4 +183,3 @@ class NotificationLogController extends Controller
         return response()->stream($callback, 200, $headers);
     }
 }
-

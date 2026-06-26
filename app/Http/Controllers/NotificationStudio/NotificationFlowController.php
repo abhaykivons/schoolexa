@@ -6,88 +6,22 @@ use App\Http\Controllers\Controller;
 use App\Models\EmailTemplate;
 use App\Models\NotificationFlow;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
 use Inertia\Inertia;
 
 class NotificationFlowController extends Controller
 {
     /**
-     * Ensure required tables exist
-     */
-    private function ensureTablesExist(): void
-    {
-        if (!Schema::hasTable('notification_flows')) {
-            Schema::create('notification_flows', function ($table) {
-                $table->id();
-                $table->foreignId('company_id')->constrained()->onDelete('cascade');
-                $table->string('name');
-                $table->text('description')->nullable();
-                $table->string('trigger_event');
-                $table->json('recipients');
-                $table->json('custom_emails')->nullable();
-                $table->boolean('send_email')->default(true);
-                $table->boolean('send_in_app')->default(false);
-                $table->boolean('send_sms')->default(false);
-                $table->foreignId('email_template_id')->nullable()->constrained('email_templates')->nullOnDelete();
-                $table->enum('send_timing', ['immediate', 'delayed', 'scheduled'])->default('immediate');
-                $table->integer('delay_minutes')->nullable();
-                $table->string('schedule_time')->nullable();
-                $table->json('conditions')->nullable();
-                $table->boolean('is_active')->default(true);
-                $table->integer('priority')->default(0);
-                $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
-                $table->foreignId('updated_by')->nullable()->constrained('users')->nullOnDelete();
-                $table->timestamps();
-                $table->index(['company_id', 'trigger_event']);
-                $table->index(['company_id', 'is_active']);
-            });
-        }
-
-        if (!Schema::hasTable('notification_logs')) {
-            Schema::create('notification_logs', function ($table) {
-                $table->id();
-                $table->foreignId('company_id')->constrained()->onDelete('cascade');
-                $table->foreignId('notification_flow_id')->nullable()->constrained('notification_flows')->nullOnDelete();
-                $table->foreignId('email_template_id')->nullable()->constrained('email_templates')->nullOnDelete();
-                $table->string('trigger_event');
-                $table->string('trigger_entity_type')->nullable();
-                $table->unsignedBigInteger('trigger_entity_id')->nullable();
-                $table->string('recipient_type');
-                $table->string('recipient_email');
-                $table->string('recipient_name')->nullable();
-                $table->unsignedBigInteger('recipient_user_id')->nullable();
-                $table->boolean('email_sent')->default(false);
-                $table->boolean('in_app_sent')->default(false);
-                $table->boolean('sms_sent')->default(false);
-                $table->string('subject')->nullable();
-                $table->longText('body')->nullable();
-                $table->enum('status', ['pending', 'sent', 'failed', 'queued'])->default('pending');
-                $table->text('error_message')->nullable();
-                $table->timestamp('scheduled_at')->nullable();
-                $table->timestamp('sent_at')->nullable();
-                $table->json('variables')->nullable();
-                $table->timestamps();
-                $table->index(['company_id', 'status']);
-                $table->index(['company_id', 'trigger_event']);
-                $table->index(['company_id', 'created_at']);
-                $table->index(['recipient_email']);
-            });
-        }
-    }
-    /**
      * Display a listing of notification flows
      */
     public function index(Request $request)
     {
-        $this->ensureTablesExist();
-        
         $query = NotificationFlow::with('emailTemplate');
 
         // Filter by event category
         if ($request->filled('category')) {
             $events = collect(NotificationFlow::getTriggerEvents())
-                ->filter(fn($event) => $event['category'] === $request->category)
+                ->filter(fn ($event) => $event['category'] === $request->category)
                 ->keys()
                 ->toArray();
             $query->whereIn('trigger_event', $events);
@@ -127,8 +61,7 @@ class NotificationFlowController extends Controller
      */
     public function create()
     {
-        $this->ensureTablesExist();
-        
+
         $templates = EmailTemplate::active()->orderBy('name')->get();
 
         return Inertia::render('modules/notification-studio/flows/form', [
@@ -240,7 +173,7 @@ class NotificationFlowController extends Controller
     public function toggleStatus(NotificationFlow $flow)
     {
         $flow->update([
-            'is_active' => !$flow->is_active,
+            'is_active' => ! $flow->is_active,
         ]);
 
         return redirect()
@@ -254,7 +187,7 @@ class NotificationFlowController extends Controller
     public function duplicate(NotificationFlow $flow)
     {
         $newFlow = $flow->replicate();
-        $newFlow->name = $flow->name . ' (Copy)';
+        $newFlow->name = $flow->name.' (Copy)';
         $newFlow->save();
 
         return redirect()
@@ -275,7 +208,7 @@ class NotificationFlowController extends Controller
         $triggerEvents = NotificationFlow::getTriggerEvents();
         $eventInfo = $triggerEvents[$flow->trigger_event] ?? null;
 
-        if (!$eventInfo) {
+        if (! $eventInfo) {
             return response()->json(['error' => 'Invalid trigger event'], 400);
         }
 
@@ -284,7 +217,7 @@ class NotificationFlowController extends Controller
 
         // Get email template
         $template = $flow->emailTemplate;
-        if (!$template && $flow->send_email) {
+        if (! $template && $flow->send_email) {
             return response()->json(['error' => 'No email template assigned'], 400);
         }
 
@@ -296,17 +229,17 @@ class NotificationFlowController extends Controller
                 // Send test email
                 \Mail::html($body, function ($message) use ($request, $subject) {
                     $message->to($request->test_email)
-                        ->subject('[TEST] ' . $subject);
+                        ->subject('[TEST] '.$subject);
                 });
             }
 
             return response()->json([
                 'success' => true,
-                'message' => 'Test notification sent to ' . $request->test_email,
+                'message' => 'Test notification sent to '.$request->test_email,
             ]);
         } catch (\Exception $e) {
             return response()->json([
-                'error' => 'Failed to send test: ' . $e->getMessage(),
+                'error' => 'Failed to send test: '.$e->getMessage(),
             ], 500);
         }
     }
@@ -325,30 +258,30 @@ class NotificationFlowController extends Controller
             'email' => 'user@example.com',
             'password' => '********',
             'school_name' => config('app.name', 'School'),
-            'login_url' => config('app.url') . '/login',
+            'login_url' => config('app.url').'/login',
             'support_email' => config('mail.from.address', 'support@school.com'),
             'grade' => 'Grade 5',
             'class' => '5-A',
             'roll_number' => '25',
-            'academic_year' => date('Y') . '-' . (date('Y') + 1),
+            'academic_year' => date('Y').'-'.(date('Y') + 1),
             'previous_grade' => 'Grade 4',
             'new_grade' => 'Grade 5',
             'new_class' => '5-A',
             'department' => 'Science',
             'designation' => 'Teacher',
-            'application_id' => 'APP-' . date('Y') . '-0042',
+            'application_id' => 'APP-'.date('Y').'-0042',
             'grade_applied' => 'Grade 5',
             'submission_date' => date('F j, Y'),
             'joining_date' => date('F j, Y'),
             'document_name' => 'Birth Certificate',
-            'resubmit_link' => config('app.url') . '/resubmit',
+            'resubmit_link' => config('app.url').'/resubmit',
             'next_steps' => 'Please complete the fee payment and submit remaining documents.',
             'reason' => 'Document is not clearly visible.',
             'approver_name' => 'Administrator',
             'requester_name' => 'Staff Member',
             'request_type' => 'Leave Request',
             'details' => 'Sample request details.',
-            'approval_link' => config('app.url') . '/approve/123',
+            'approval_link' => config('app.url').'/approve/123',
             'approved_by' => 'Principal',
             'approval_date' => date('F j, Y'),
             'rejected_by' => 'Administrator',
@@ -361,7 +294,7 @@ class NotificationFlowController extends Controller
             'reminder_body' => 'This is a sample reminder.',
             'due_date' => date('F j, Y', strtotime('+3 days')),
             'date' => date('F j, Y'),
-            'reset_link' => config('app.url') . '/reset-password/token',
+            'reset_link' => config('app.url').'/reset-password/token',
             'expiry_time' => '24 hours',
         ];
 
@@ -378,7 +311,6 @@ class NotificationFlowController extends Controller
      */
     public function seedDefaults()
     {
-        $this->ensureTablesExist();
 
         $defaultFlows = NotificationFlow::getDefaultFlows();
         $created = 0;
@@ -386,8 +318,8 @@ class NotificationFlowController extends Controller
         foreach ($defaultFlows as $flowData) {
             // Check if flow with same trigger_event already exists
             $exists = NotificationFlow::where('trigger_event', $flowData['trigger_event'])->exists();
-            
-            if (!$exists) {
+
+            if (! $exists) {
                 // Try to find matching email template
                 $template = EmailTemplate::where('event_type', $flowData['trigger_event'])->first();
 
@@ -401,9 +333,9 @@ class NotificationFlowController extends Controller
             }
         }
 
-        $message = $created > 0 
+        $message = $created > 0
             ? "{$created} default notification flows created successfully."
-            : "All default notification flows already exist.";
+            : 'All default notification flows already exist.';
 
         return redirect()
             ->back()
@@ -418,4 +350,3 @@ class NotificationFlowController extends Controller
         return response()->json(NotificationFlow::getDefaultFlows());
     }
 }
-
