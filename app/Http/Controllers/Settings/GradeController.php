@@ -77,10 +77,15 @@ class GradeController extends Controller
         ]);
 
         DB::transaction(function () use ($request) {
-            // Update all to negative values (to avoid unique constraint conflict)
-            DB::statement('UPDATE grades SET `order` = -`order`');
+            $companyId = session('company_id');
 
-            // Then update to new values
+            // Flip to negative values to avoid unique-constraint conflicts during
+            // the swap. Scoped to the caller's company so other tenants' grade
+            // ordering is never touched (the raw UPDATE used to hit every company).
+            Grade::where('company_id', $companyId)
+                ->update(['order' => DB::raw('-`order`')]);
+
+            // Then update to new values (Grade's CompanyScope keeps this scoped too)
             foreach ($request->grades as $gradeData) {
                 Grade::where('id', $gradeData['id'])
                     ->update(['order' => $gradeData['order']]);
