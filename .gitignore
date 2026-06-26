@@ -16,6 +16,11 @@ public_html/storage
 public_html/hot
 
 storage/*.key
+
+# Encryption key material — must be provisioned out-of-band, never committed
+/storage/framework/bootstrap/.sys_bin_
+storage/**/.sys_bin_
+
 .env
 Homestead.yaml
 Homestead.json

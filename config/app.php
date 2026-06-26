@@ -120,6 +120,24 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Searchable Email Encryption Key / IV
+    |--------------------------------------------------------------------------
+    |
+    | Deterministic key/IV used by App\Helpers\BaseHelper::customCrypt to encrypt
+    | searchable columns (e.g. user email) so a value can be located by its
+    | ciphertext at login. Sourced from the environment so they can be rotated
+    | without code changes. The defaults match the legacy hard-coded values for
+    | backward compatibility with already-stored ciphertext and MUST be replaced
+    | (and the data re-encrypted) in any real deployment — see
+    | docs/runbooks/key-rotation.md.
+    |
+    */
+
+    'email_crypt_key' => env('EMAIL_CRYPT_KEY', 'Qp6UypXXQNvKcyRylI6vTgtqTFOqNbw0_key'),
+    'email_crypt_iv' => env('EMAIL_CRYPT_IV', 'Qp6UypXXQNvKcyRylI6vTgtqTFOqNbw0_iv'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Maintenance Mode Driver
     |--------------------------------------------------------------------------
     |
