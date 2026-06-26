@@ -1,0 +1,31 @@
+# SchoolExa - School Management Software
+# https://schoolexa.com
+
+User-agent: *
+Allow: /
+
+# Disallow admin and authenticated areas
+Disallow: /dashboard
+Disallow: /settings
+Disallow: /staff
+Disallow: /admission
+Disallow: /calendar
+Disallow: /notification-studio
+Disallow: /school-admission
+Disallow: /api/
+
+# Allow search engines to crawl all public pages
+Allow: /about
+Allow: /careers
+Allow: /partners
+Allow: /docs
+Allow: /press-kit
+Allow: /privacy-policy
+Allow: /terms-of-service
+Allow: /cookie-policy
+
+# Sitemap location - IMPORTANT for Google Sitelinks
+Sitemap: https://schoolexa.com/sitemap.xml
+
+# Crawl-delay for politeness (optional)
+Crawl-delay: 1
