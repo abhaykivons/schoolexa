@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ApprovalFlow;
 use App\Models\EnrollmentDocument;
 use App\Models\EnrollmentFormSetting;
+use App\Models\Scopes\CompanyScope;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -19,13 +20,21 @@ class EnrollmentSettingController extends Controller
     public function index()
     {
         if (!Auth::user()) {
-            $documents = EnrollmentDocument::where('type', 'staff-enrollment')
+            // This endpoint is public (no session), so CompanyScope now fails
+            // closed for it. Opt out explicitly to preserve existing behavior.
+            // KNOWN LIMITATION (deferred, see SECURITY_REMEDIATION.md): the public
+            // form carries no company identifier, so it cannot be scoped to a
+            // single school and returns documents/config across companies. Needs a
+            // company-bound public route before this can be properly scoped.
+            $documents = EnrollmentDocument::withoutGlobalScope(CompanyScope::class)
+                ->where('type', 'staff-enrollment')
                 ->where('is_visible', true)
                 ->orderBy('created_at', 'desc')
                 ->get();
 
-            $config = EnrollmentFormSetting::where('form_type', 'staff-enrollment-setting-configuration')->first();
-            
+            $config = EnrollmentFormSetting::withoutGlobalScope(CompanyScope::class)
+                ->where('form_type', 'staff-enrollment-setting-configuration')->first();
+
             return response()->json([
                 'documents' => $documents,
                 'config' => $config

@@ -194,13 +194,15 @@ class EnrollmentController extends Controller
             }
 
             if (!empty($enrollment->portfolio_file_path)) {
-                $enrollmentArray['portfolio_file_url'] = route('private.storage', [
-                    'path' => str_replace('\\', '/', $enrollment->portfolio_file_path)
+                $enrollmentArray['portfolio_file_url'] = route('staff-enrollment.file', [
+                    'id' => $enrollment->id,
+                    'type' => 'portfolio',
                 ]);
             }
             if (!empty($enrollment->resume_file_path)) {
-                $enrollmentArray['resume_file_url'] = route('private.storage', [
-                    'path' => str_replace('\\', '/', $enrollment->resume_file_path)
+                $enrollmentArray['resume_file_url'] = route('staff-enrollment.file', [
+                    'id' => $enrollment->id,
+                    'type' => 'resume',
                 ]);
             }
 
@@ -417,11 +419,31 @@ class EnrollmentController extends Controller
 
         // Store the file in the private storage
         return Storage::disk('private')->putFileAs(
-            $directory, 
-            $file, 
+            $directory,
+            $file,
             $safeName
         );
     }
 
+    /**
+     * Stream a staff enrollment's resume/portfolio file with an ownership check.
+     * StaffEnrollment is company-scoped, so findOrFail() 404s for other companies'
+     * records. This replaces the old raw /private-storage/{path} route that served
+     * any file under storage/app/private to any authenticated school user.
+     */
+    public function downloadFile($id, string $type)
+    {
+        abort_unless(in_array($type, ['resume', 'portfolio'], true), 404);
 
+        $enrollment = StaffEnrollment::findOrFail($id);
+
+        $path = $type === 'resume'
+            ? $enrollment->resume_file_path
+            : $enrollment->portfolio_file_path;
+
+        abort_if(empty($path), 404);
+        abort_unless(Storage::disk('private')->exists($path), 404);
+
+        return Storage::disk('private')->response($path);
+    }
 }

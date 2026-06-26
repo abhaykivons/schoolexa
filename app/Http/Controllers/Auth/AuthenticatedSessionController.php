@@ -44,6 +44,18 @@ class AuthenticatedSessionController extends Controller
             ]);
         }
 
+        // Deactivated/suspended accounts (status = false) must not be able to log
+        // in. The status column defaults to true, so active accounts are unaffected.
+        if(! Auth::user()->status){
+            Auth::guard('web')->logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            throw ValidationException::withMessages([
+                'email' => 'Your account has been deactivated. Please contact administrator.',
+            ]);
+        }
+
         // Redirect based on user type and domain
         if(Auth::user()->type === 'developer'){
             return redirect()->intended(route('developer.dashboard', absolute: false));

@@ -10,7 +10,13 @@ class BaseHelper
             return $plaintext;
         }
 
-        $key = hex2bin(self::getEncryptionKey());
+        // Fail closed: never silently store data under an empty/missing key.
+        $rawKey = self::getEncryptionKey();
+        if ($rawKey === null || $rawKey === '') {
+            throw new \RuntimeException('Encryption key is unavailable; refusing to store data unencrypted. Provision the key file referenced by config(app.encryption_master_key).');
+        }
+
+        $key = hex2bin($rawKey);
         $iv = random_bytes(16);
 
         $ciphertext = openssl_encrypt($plaintext, 'AES-256-CBC', $key, OPENSSL_RAW_DATA, $iv);
@@ -66,8 +72,12 @@ class BaseHelper
 
     public static function customCrypt($string, $action = 'e')
     {
-        $secret_key = 'Qp6UypXXQNvKcyRylI6vTgtqTFOqNbw0_key';
-        $secret_iv  = 'Qp6UypXXQNvKcyRylI6vTgtqTFOqNbw0_iv';
+        // Keys are sourced from config/env so they can be rotated without code
+        // changes. Defaults preserve backward compatibility with data encrypted
+        // under the original keys; set EMAIL_CRYPT_KEY / EMAIL_CRYPT_IV in the
+        // environment and re-encrypt to rotate (docs/runbooks/key-rotation.md).
+        $secret_key = config('app.email_crypt_key');
+        $secret_iv  = config('app.email_crypt_iv');
 
         $encrypt_method = "AES-256-CBC";
         $key = hash('sha256', $secret_key);

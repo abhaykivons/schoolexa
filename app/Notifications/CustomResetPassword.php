@@ -4,6 +4,7 @@ namespace App\Notifications;
 
 use App\Models\EmailTemplate;
 use App\Models\NotificationFlow;
+use App\Models\Scopes\CompanyScope;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -53,10 +54,18 @@ class CustomResetPassword extends Notification
             default => 'parent_password_reset',
         };
 
-        // Try to get custom template
-        $template = EmailTemplate::where('event_type', $eventType)
-            ->where('is_active', true)
-            ->first();
+        // Try to get a custom template scoped to the notifiable's company. This
+        // runs in a guest (no-session) context, so use an explicit company_id
+        // instead of the request-session CompanyScope — otherwise the lookup would
+        // match another company's template (or, once the scope is fail-closed, none).
+        $template = null;
+        if (!empty($notifiable->company_id)) {
+            $template = EmailTemplate::withoutGlobalScope(CompanyScope::class)
+                ->where('company_id', $notifiable->company_id)
+                ->where('event_type', $eventType)
+                ->where('is_active', true)
+                ->first();
+        }
 
         if ($template) {
             $variables = [

@@ -21,7 +21,8 @@
     
     $getValue = function($key) use ($formData, $safe) {
         $val = $safe($formData[$key] ?? '');
-        return $val ?: '<span class="text-muted" style="font-style:italic;">—</span>';
+        // Escape parent-supplied data so it can't inject HTML/CSS into the PDF.
+        return $val !== '' ? e($val) : '<span class="text-muted" style="font-style:italic;">—</span>';
     };
 @endphp
 

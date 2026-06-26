@@ -9,6 +9,7 @@ use App\Models\EmailTemplate;
 use App\Models\InAppNotification;
 use App\Models\NotificationFlow;
 use App\Models\NotificationLog;
+use App\Models\Scopes\CompanyScope;
 use App\Models\StaffEnrollment;
 use App\Models\Student;
 use App\Models\StudentEnrollment;
@@ -384,7 +385,9 @@ class NotificationService
     public function processLog(NotificationLog $log): void
     {
         try {
-            $flow = $log->notificationFlow;
+            // Runs on the queue/cron (no session), so opt out of CompanyScope
+            // explicitly — the log already carries its own company_id.
+            $flow = $log->notificationFlow()->withoutGlobalScope(CompanyScope::class)->first();
 
             // Send email
             if ($flow && $flow->send_email && $log->body) {
@@ -392,8 +395,8 @@ class NotificationService
                     $message->to($log->recipient_email, $log->recipient_name)
                         ->subject($log->subject);
 
-                    // Set from if specified in template
-                    $template = $log->emailTemplate;
+                    // Set from if specified in template (no session on the queue)
+                    $template = $log->emailTemplate()->withoutGlobalScope(CompanyScope::class)->first();
                     if ($template && $template->from_email) {
                         $message->from($template->from_email, $template->from_name);
                     }
@@ -474,7 +477,11 @@ class NotificationService
      */
     public function processScheduledNotifications(): int
     {
-        $logs = NotificationLog::pending()
+        // Cron context (no session): opt out of CompanyScope so the fail-closed
+        // scope doesn't hide every company's due logs. Each log carries its own
+        // company_id and is re-dispatched individually.
+        $logs = NotificationLog::withoutGlobalScope(CompanyScope::class)
+            ->pending()
             ->where('scheduled_at', '<=', now())
             ->get();
 
