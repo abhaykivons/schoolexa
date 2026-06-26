@@ -49,14 +49,29 @@ Generated from the security audit on 2026-06-27. Findings are addressed on the
   through ownership-checked controllers and stop emitting raw paths. 🔁 May be split if it needs
   the `StaffEnrollment.company_id` column (see deferred).
 
-### Phase 5 — Systemic: CompanyScope fail-closed 🟠
-- Make `CompanyScope` deny (empty result) when no `company_id` is resolvable, and update the
-  legitimate no-session consumers (scheduled-notification cron) to set company context or use
-  `withoutGlobalScope` explicitly. Neutralizes the whole fail-open class (#6 and future leaks).
+### Phase 5 — Systemic: CompanyScope fail-closed 🟠 ✅
+- ✅ `CompanyScope` now denies (`WHERE 1=0`) when no `company_id` is resolvable, instead of
+  returning every company's rows. Authenticated web requests always have the session
+  (`HandleAppearance`), so normal operation is unchanged; only off-session contexts are affected,
+  and they now fail **safe** (empty) instead of leaking.
+- ✅ Updated the trusted off-session readers to opt out explicitly with
+  `withoutGlobalScope(CompanyScope::class)`, each constraining `company_id` from its own data:
+  - `NotificationService::processScheduledNotifications()` (cron) — reads due `NotificationLog`s.
+  - `NotificationService::processLog()` (queue) — loads the log's `notificationFlow`/`emailTemplate`.
+  - `EnrollmentSettingController::index()` public branch — preserves existing behavior (see deferred).
+  - `CustomResetPassword` was already converted in Phase 4.
+- `User` deliberately stays unscoped (login/impersonation query it across the boundary); its
+  protection is the controller-level company checks added in Phase 2.
+- ⚠️ **QA before deploy:** verify notification delivery on a **real queue worker** (not just
+  `QUEUE_CONNECTION=sync`) and the scheduled-notification cron, since those are the paths most
+  affected by the fail-closed change.
 
 ## Deferred (need a decision) 📋
-- **#5b `StaffEnrollment` has no `company_id`** — resumes/portfolios can't be company-scoped
-  until a column is added + backfilled.
+- **Public enrollment-settings endpoint can't resolve a company.** `GET get-staff-enrollment-settings`
+  is unauthenticated and carries no company identifier, so it returns `EnrollmentDocument`/
+  `EnrollmentFormSetting` across all companies (a pre-existing cross-tenant info leak, preserved in
+  Phase 5 to avoid breaking the public form). Fix needs a company-bound public route
+  (e.g. `/{companyUuid}/enrollment-settings`) before it can be scoped.
 - **PublicHoliday cross-tenant mutation** — needs a `company_id` (nullable = shared national
   holiday) + a migration/backfill, plus restricting mutation to admins.
 - **#11 Parent self-registration** — auto-login without email verification against any company
