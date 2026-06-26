@@ -1,25 +1,23 @@
 <?php
 
-use App\Models\User;
 use App\Models\Company;
 use App\Models\EmailTemplate;
-use App\Models\NotificationFlow;
-use App\Models\NotificationLog;
+use App\Models\User;
 
 uses(\Illuminate\Foundation\Testing\RefreshDatabase::class);
 
 beforeEach(function () {
     Company::factory()->create(['id' => 1, 'name' => 'Test School']);
     $this->user = User::factory()->create(['company_id' => 1]);
-    
+
     // Create tables if they don't exist (for testing purposes)
-    if (!\Schema::hasTable('notification_flows')) {
+    if (! \Schema::hasTable('notification_flows')) {
         \Artisan::call('migrate', ['--force' => true]);
     }
 });
 
 describe('Notification Studio Dashboard', function () {
-    
+
     test('guests cannot view notification studio', function () {
         $this->get(route('notification-studio.index'))
             ->assertRedirect('/login');
@@ -61,7 +59,7 @@ describe('Email Templates', function () {
     test('authenticated users can view email templates list', function () {
         // Clear any existing templates to ensure test isolation (bypass global scope)
         EmailTemplate::withoutGlobalScopes()->delete();
-        
+
         EmailTemplate::factory()->count(3)->create(['company_id' => 1]);
 
         $this->actingAs($this->user)
@@ -69,7 +67,7 @@ describe('Email Templates', function () {
             ->assertOk()
             ->assertInertia(fn ($page) => $page
                 ->component('modules/notification-studio/templates/index')
-                ->has('templates', 3)
+                ->has('templates.data', 3)
             );
     });
 
@@ -173,4 +171,3 @@ describe('Email Templates', function () {
     });
 
 });
-

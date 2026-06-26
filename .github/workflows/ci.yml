@@ -1,0 +1,109 @@
+name: CI
+
+# Phase 0 safety net for the Laravel 13 upgrade.
+# - `tests` is the BLOCKING gate (the real regression safety net).
+# - `quality` (Pint + composer audit) is advisory for now because the existing
+#   codebase predates Pint; it checks only files changed in the PR so legacy
+#   style noise does not drown real issues. Flip `continue-on-error` to false
+#   once a one-time repo-wide `pint` format has landed.
+# - `frontend` builds the Inertia/React/Vite bundle to catch TS/build breakage.
+
+on:
+  push:
+    branches: [main, 'upgrade/**']
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: Tests (Pest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          # 8.3 satisfies Laravel 12 (^8.2) today and is the Laravel 13 minimum,
+          # so the same matrix entry stays valid across the upgrade.
+          php-version: '8.3'
+          extensions: mbstring, pdo_sqlite, sqlite3, dom, curl, fileinfo, gd, zip, bcmath, intl
+          coverage: none
+          tools: composer:v2
+
+      - name: Cache Composer dependencies
+        uses: actions/cache@v4
+        with:
+          path: vendor
+          key: composer-${{ runner.os }}-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-
+
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Prepare environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      - name: Run test suite
+        run: php artisan test
+
+  quality:
+    name: Quality (advisory)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+          tools: composer:v2
+
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Pint (changed files only)
+        continue-on-error: true
+        run: |
+          BASE="${{ github.event.pull_request.base.sha || 'origin/main' }}"
+          git fetch origin main --depth=1 || true
+          CHANGED=$(git diff --name-only --diff-filter=ACMR "$BASE"...HEAD -- '*.php' || true)
+          if [ -n "$CHANGED" ]; then
+            echo "$CHANGED" | xargs ./vendor/bin/pint --test
+          else
+            echo "No PHP files changed."
+          fi
+
+      - name: Composer security audit
+        continue-on-error: true
+        run: composer audit --no-interaction
+
+  frontend:
+    name: Frontend build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build assets
+        run: npm run build

@@ -2,8 +2,8 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
@@ -18,8 +18,16 @@ return new class extends Migration
             $table->string('partner_type')->nullable()->after('company_website');
         });
 
-        // Update the type enum to include 'partner'
-        DB::statement("ALTER TABLE leads MODIFY COLUMN type ENUM('waitlist', 'demo', 'contact_sales', 'free_trial', 'partner', 'contact') DEFAULT 'waitlist'");
+        // Widen the `type` enum to include 'partner' and 'contact'. MySQL/MariaDB use a
+        // native MODIFY; other drivers (e.g. SQLite in tests/CI) recreate the column via
+        // the schema builder so migrations stay portable.
+        if (in_array(Schema::getConnection()->getDriverName(), ['mysql', 'mariadb'], true)) {
+            DB::statement("ALTER TABLE leads MODIFY COLUMN type ENUM('waitlist', 'demo', 'contact_sales', 'free_trial', 'partner', 'contact') DEFAULT 'waitlist'");
+        } else {
+            Schema::table('leads', function (Blueprint $table) {
+                $table->enum('type', ['waitlist', 'demo', 'contact_sales', 'free_trial', 'partner', 'contact'])->default('waitlist')->change();
+            });
+        }
     }
 
     /**
@@ -31,6 +39,12 @@ return new class extends Migration
             $table->dropColumn(['company_name', 'company_website', 'partner_type']);
         });
 
-        DB::statement("ALTER TABLE leads MODIFY COLUMN type ENUM('waitlist', 'demo', 'contact_sales', 'free_trial') DEFAULT 'waitlist'");
+        if (in_array(Schema::getConnection()->getDriverName(), ['mysql', 'mariadb'], true)) {
+            DB::statement("ALTER TABLE leads MODIFY COLUMN type ENUM('waitlist', 'demo', 'contact_sales', 'free_trial') DEFAULT 'waitlist'");
+        } else {
+            Schema::table('leads', function (Blueprint $table) {
+                $table->enum('type', ['waitlist', 'demo', 'contact_sales', 'free_trial'])->default('waitlist')->change();
+            });
+        }
     }
 };
