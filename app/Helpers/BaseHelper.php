@@ -48,7 +48,7 @@ class BaseHelper
 
     public static function getEncryptionKey(): ?string
     {
-        $masterKey = env('ENCRYPTION_MASTER_KEY');
+        $masterKey = config('app.encryption_master_key');
         $path = storage_path(base64_decode($masterKey));
         if (!file_exists($path)) {
             return null;
@@ -58,7 +58,7 @@ class BaseHelper
 
     public static function storeEncryptionKey(string $key): void
     {
-        $masterKey = env('ENCRYPTION_MASTER_KEY');
+        $masterKey = config('app.encryption_master_key');
         $path = storage_path(base64_decode($masterKey));
         file_put_contents($path, $key);
         chmod($path, 0600);

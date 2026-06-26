@@ -13,7 +13,7 @@ class SecureGenerateKey extends Command
 
     public function handle()
     {
-        $masterKey = base64_decode(env('ENCRYPTION_MASTER_KEY'));
+        $masterKey = base64_decode((string) config('app.encryption_master_key'));
         if (!$masterKey) {
             $this->error('Master key missing!');
             return;
