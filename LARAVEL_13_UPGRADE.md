@@ -73,3 +73,16 @@ Decision 2026-06-27: defer because these require re-encrypting/altering existing
 - `CompanyScope` is **fail-open** when the session has no `company_id` ([Scopes/CompanyScope.php:17](app/Models/Scopes/CompanyScope.php#L17)); make it deny-by-default for tenant models and audit every model that should carry it.
 - `.env.example`: ship `APP_DEBUG=false`, set `SESSION_SECURE_COOKIE=true`; disable `PDO::ATTR_PERSISTENT` on tenant/mysql connections.
 - Add a multi-tenant **isolation test** asserting cross-company access is denied (the suite has none).
+
+---
+
+## Phase 2 — Laravel 13 bump (done)
+Resolved to **Laravel 13.17.0** on PHP 8.4. Constraint changes: `php ^8.3`, `laravel/framework ^13.0`, `laravel/tinker ^3.0`, `pestphp/pest ^4.0`, `pest-plugin-laravel ^4.0`, `stancl/tenancy ^3.10`. `spatie/laravel-permission` (6.25.0) and `inertiajs/inertia-laravel` (2.0.24) already support L13 within their existing constraints; `nunomaduro/collision` stays `^8` (Pest 4 requires it). `composer audit`: clean.
+
+**Verification:** full suite 123/123 under Pest 4.7.4 / PHPUnit 12.5.30 with no code changes; app boots; `route:cache` / `config:cache` / `view:cache` build; scheduler registers.
+
+**L13 breaking-change audit (grepped, all clear in code):** no `VerifyCsrfToken` refs (CSRF middleware renamed to `PreventRequestForgery`), no `->upsert()`, no `new static()` in model `boot()`, no custom `array_first/array_last`, no `JobAttempted`/`QueueBusy` listeners, no direct `pagination::default` refs. Nothing caches PHP objects, so the new hardened `cache.serializable_classes=false` default is safe.
+
+### ⚠️ Deploy-time items (handle in Phase 4)
+- **Session cookie / cache prefix names changed** (`_` → `-` defaults in L13). `SESSION_COOKIE` and `CACHE_PREFIX` were unset → would log out all users and miss cache on deploy. Pinned to pre-upgrade values in `.env.example` (`schoolexa_session`, `schoolexa_cache_`); **production `.env` must set the same** (plus `REDIS_PREFIX=schoolexa_database_` if on Redis).
+- New `symfony/polyfill-php85` defines `array_first/array_last` on PHP < 8.5 — prefer `Arr::first/Arr::last` going forward (none in use today).
